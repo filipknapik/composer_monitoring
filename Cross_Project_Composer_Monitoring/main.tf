@@ -24,8 +24,8 @@
 
 
 locals {
-    monitoring_project = "ihub-sample"
-    monitored_projects = toset(["filipsdirtytests4", "filipstest5"])
+    monitoring_project = "mynewproj"
+    monitored_projects = toset(["project1", "project2", "project3"])
 }
 
 #######################################################
@@ -35,7 +35,6 @@ locals {
 ########################################################
 
 provider "google-beta" {
-  region = "us-central1"
   project = local.monitoring_project
 }
 
@@ -45,12 +44,13 @@ provider "google-beta" {
 #
 ########################################################
 
-resource "google_monitoring_monitored_project" "project1monitoring" {
+resource "google_monitoring_monitored_project" "projects_monitored" {
   for_each = local.monitored_projects
   metrics_scope = join("",["locations/global/metricsScopes/",local.monitoring_project])
   name          = "${each.value}"
   provider      = google-beta
 }
+
 
 #######################################################
 #  
@@ -158,6 +158,11 @@ resource "google_monitoring_alert_policy" "environment_health" {
         }
     }
   }
+
+
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "database_health" {
@@ -186,6 +191,9 @@ resource "google_monitoring_alert_policy" "database_health" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "webserver_health" {
@@ -213,6 +221,9 @@ resource "google_monitoring_alert_policy" "webserver_health" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "scheduler_heartbeat" {
@@ -242,6 +253,9 @@ resource "google_monitoring_alert_policy" "scheduler_heartbeat" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "database_cpu" {
@@ -263,6 +277,9 @@ resource "google_monitoring_alert_policy" "database_cpu" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "scheduler_cpu" {
@@ -286,6 +303,9 @@ resource "google_monitoring_alert_policy" "scheduler_cpu" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "worker_cpu" {
@@ -309,6 +329,9 @@ resource "google_monitoring_alert_policy" "worker_cpu" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "webserver_cpu" {
@@ -332,6 +355,33 @@ resource "google_monitoring_alert_policy" "webserver_cpu" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
+}
+
+resource "google_monitoring_alert_policy" "parsing_time" {
+  display_name = "DAG Parsing Time"
+  combiner     = "OR"
+  conditions {
+    display_name = "DAG Parsing Time"
+    condition_monitoring_query_language {
+        query = join("", [
+            "fetch cloud_composer_environment",
+            "| metric 'composer.googleapis.com/environment/dag_processing/total_parse_time'",
+            "| group_by 5m, [value_total_parse_time_mean: mean(value.total_parse_time)]",
+            "| every 5m",
+            "| group_by [resource.project_id, resource.environment_name]",
+            "| condition val(0) > cast_units(30,\"s\")"])
+        duration = "120s"
+        trigger {
+            count = "1"
+        }
+    }
+  }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "database_memory" {
@@ -353,6 +403,9 @@ resource "google_monitoring_alert_policy" "database_memory" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "scheduler_memory" {
@@ -376,6 +429,14 @@ resource "google_monitoring_alert_policy" "scheduler_memory" {
         }
     }
   }
+  documentation {
+      content = join("", [
+          "Scheduler Memory exceeds a threshold, summed across all schedulers in the environment. ",
+          "Add more schedulers OR increase scheduler's memory OR reduce scheduling load (e.g. through lower parsing frequency or lower number of DAGs/tasks running"])
+  }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "worker_memory" {
@@ -399,6 +460,9 @@ resource "google_monitoring_alert_policy" "worker_memory" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "webserver_memory" {
@@ -422,6 +486,9 @@ resource "google_monitoring_alert_policy" "webserver_memory" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "scheduled_tasks_percentage" {
@@ -444,6 +511,9 @@ resource "google_monitoring_alert_policy" "scheduled_tasks_percentage" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "queued_tasks_percentage" {
@@ -467,13 +537,43 @@ resource "google_monitoring_alert_policy" "queued_tasks_percentage" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
-resource "google_monitoring_alert_policy" "workers_above_minimum" {
-  display_name = "Current vs min number of workers (negative = missing workers)"
+resource "google_monitoring_alert_policy" "queued_or_scheduled_tasks_percentage" {
+  display_name = "Queued or Scheduled Tasks Percentage"
   combiner     = "OR"
   conditions {
-    display_name = "Current vs min number of workers"
+    display_name = "Queued or Scheduled Tasks Percentage"
+    condition_monitoring_query_language {
+        query = join("", [
+            "fetch cloud_composer_environment",
+            "| metric 'composer.googleapis.com/environment/unfinished_task_instances'",
+            "| align mean_aligner(10m)",
+            "| every(10m)",
+            "| window(10m)",
+            "| filter_ratio_by [resource.project_id, resource.environment_name], or(metric.state = 'queued', metric.state = 'scheduled' )",
+            "| group_by [resource.project_id, resource.environment_name]",
+            "| condition val() > 0.80"])
+        duration = "120s"
+        trigger {
+            count = "1"
+        }
+    }
+  }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
+}
+
+
+resource "google_monitoring_alert_policy" "workers_above_minimum" {
+  display_name = "Workers above minimum (negative = missing workers)"
+  combiner     = "OR"
+  conditions {
+    display_name = "Workers above minimum"
     condition_monitoring_query_language {
         query = join("", [
             "fetch cloud_composer_environment",
@@ -493,6 +593,9 @@ resource "google_monitoring_alert_policy" "workers_above_minimum" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "pod_evictions" {
@@ -508,12 +611,15 @@ resource "google_monitoring_alert_policy" "pod_evictions" {
             "| every 1m",
             "| group_by [resource.project_id, resource.environment_name]",
             "| condition val() > 0"])
-        duration = "0s"
+        duration = "60s"
         trigger {
             count = "1"
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "scheduler_errors" {
@@ -526,18 +632,21 @@ resource "google_monitoring_alert_policy" "scheduler_errors" {
             "fetch cloud_composer_environment",
             "| metric 'logging.googleapis.com/log_entry_count'",
             "| filter (metric.log == 'airflow-scheduler' && metric.severity == 'ERROR')",
-            "| group_by 1m,",
+            "| group_by 5m,",
             "    [value_log_entry_count_aggregate: aggregate(value.log_entry_count)]",
-            "| every 1m",
+            "| every 5m",
             "| group_by [resource.project_id, resource.environment_name],",
             "    [value_log_entry_count_aggregate_max: max(value_log_entry_count_aggregate)]",
             "| condition val() > 50"])
-        duration = "60s"
+        duration = "300s"
         trigger {
             count = "1"
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "worker_errors" {
@@ -550,18 +659,21 @@ resource "google_monitoring_alert_policy" "worker_errors" {
             "fetch cloud_composer_environment",
             "| metric 'logging.googleapis.com/log_entry_count'",
             "| filter (metric.log == 'airflow-worker' && metric.severity == 'ERROR')",
-            "| group_by 1m,",
+            "| group_by 5m,",
             "    [value_log_entry_count_aggregate: aggregate(value.log_entry_count)]",
-            "| every 1m",
+            "| every 5m",
             "| group_by [resource.project_id, resource.environment_name],",
             "    [value_log_entry_count_aggregate_max: max(value_log_entry_count_aggregate)]",
             "| condition val() > 50"])
-        duration = "60s"
+        duration = "300s"
         trigger {
             count = "1"
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "webserver_errors" {
@@ -574,18 +686,21 @@ resource "google_monitoring_alert_policy" "webserver_errors" {
             "fetch cloud_composer_environment",
             "| metric 'logging.googleapis.com/log_entry_count'",
             "| filter (metric.log == 'airflow-webserver' && metric.severity == 'ERROR')",
-            "| group_by 1m,",
+            "| group_by 5m,",
             "    [value_log_entry_count_aggregate: aggregate(value.log_entry_count)]",
-            "| every 1m",
+            "| every 5m",
             "| group_by [resource.project_id, resource.environment_name],",
             "    [value_log_entry_count_aggregate_max: max(value_log_entry_count_aggregate)]",
             "| condition val() > 50"])
-        duration = "60s"
+        duration = "300s"
         trigger {
             count = "1"
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "other_errors" {
@@ -600,17 +715,20 @@ resource "google_monitoring_alert_policy" "other_errors" {
             "| filter",
             "    (metric.log !~ 'airflow-scheduler|airflow-worker|airflow-webserver'",
             "     && metric.severity == 'ERROR')",
-            "| group_by 1m, [value_log_entry_count_max: max(value.log_entry_count)]",
-            "| every 1m",
+            "| group_by 5m, [value_log_entry_count_max: max(value.log_entry_count)]",
+            "| every 5m",
             "| group_by [resource.project_id, resource.environment_name],",
             "    [value_log_entry_count_max_aggregate: aggregate(value_log_entry_count_max)]",
             "| condition val() > 10"])
-        duration = "60s"
+        duration = "300s"
         trigger {
             count = "1"
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "new_tasks_for_retry" {
@@ -637,6 +755,9 @@ resource "google_monitoring_alert_policy" "new_tasks_for_retry" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 resource "google_monitoring_alert_policy" "new_tasks_failed" {
@@ -663,6 +784,9 @@ resource "google_monitoring_alert_policy" "new_tasks_failed" {
         }
     }
   }
+  #alert_strategy {
+  #    auto_close = "30m"
+  #}
 }
 
 
@@ -745,68 +869,11 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
             "content": "",
             "format": "RAW"
           },
-          "title": "CPU Utilization"
+          "title": "Airflow Task Execution and DAG Parsing"
         },
         "width": 12,
         "xPos": 0,
         "yPos": 9
-      },
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.database_cpu.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 0,
-        "yPos": 10
-      },
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.scheduler_cpu.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 6,
-        "yPos": 10
-      },
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.worker_cpu.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 0,
-        "yPos": 14
-      },
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.webserver_cpu.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 6,
-        "yPos": 14
-      },
-      {
-        "height": 1,
-        "widget": {
-          "text": {
-            "content": "",
-            "format": "RAW"
-          },
-          "title": "Task execution bottleneck"
-        },
-        "width": 12,
-        "xPos": 0,
-        "yPos": 18
       },
       {
         "height": 4,
@@ -817,7 +884,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 19
+        "yPos": 10
       },
       {
         "height": 4,
@@ -828,7 +895,29 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 19
+        "yPos": 10
+      },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.queued_or_scheduled_tasks_percentage.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 0,
+        "yPos": 14
+      },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.parsing_time.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 6,
+        "yPos": 14
       },
       {
         "height": 1,
@@ -841,7 +930,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 12,
         "xPos": 0,
-        "yPos": 23
+        "yPos": 18
       },
       {
         "height": 4,
@@ -852,7 +941,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 24
+        "yPos": 19
       },
       {
         "height": 4,
@@ -863,8 +952,66 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
+        "yPos": 19
+      },
+      {
+        "height": 1,
+        "widget": {
+          "text": {
+            "content": "",
+            "format": "RAW"
+          },
+          "title": "CPU Utilization"
+        },
+        "width": 12,
+        "xPos": 0,
+        "yPos": 23
+      },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.database_cpu.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 0,
         "yPos": 24
       },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.scheduler_cpu.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 6,
+        "yPos": 24
+      },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.worker_cpu.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 0,
+        "yPos": 28
+      },
+      {
+        "height": 4,
+        "widget": {
+          "alertChart": {
+            "name": "${google_monitoring_alert_policy.webserver_cpu.name}"
+          }
+        },
+        "width": 6,
+        "xPos": 6,
+        "yPos": 28
+      },
+      
       {
         "height": 1,
         "widget": {
@@ -876,7 +1023,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 12,
         "xPos": 0,
-        "yPos": 28
+        "yPos": 32
       },
       {
         "height": 4,
@@ -887,7 +1034,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 29
+        "yPos": 33
       },
       {
         "height": 4,
@@ -898,7 +1045,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 29
+        "yPos": 33
       },
       {
         "height": 4,
@@ -909,7 +1056,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 33
+        "yPos": 37
       },
       {
         "height": 4,
@@ -920,7 +1067,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 33
+        "yPos": 37
       },
       {
         "height": 1,
@@ -929,11 +1076,11 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
             "content": "",
             "format": "RAW"
           },
-          "title": "Errors"
+          "title": "Airflow component errors"
         },
         "width": 12,
         "xPos": 0,
-        "yPos": 37
+        "yPos": 41
       },
       {
         "height": 4,
@@ -944,7 +1091,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 38
+        "yPos": 42
       },
       {
         "height": 4,
@@ -955,7 +1102,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 38
+        "yPos": 42
       },
             {
         "height": 4,
@@ -966,7 +1113,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 44
+        "yPos": 48
       },
       {
         "height": 4,
@@ -977,7 +1124,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 44
+        "yPos": 48
       },
       {
         "height": 1,
@@ -990,7 +1137,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 12,
         "xPos": 0,
-        "yPos": 48
+        "yPos": 52
       },
       {
         "height": 4,
@@ -1001,7 +1148,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 0,
-        "yPos": 49
+        "yPos": 53
       },   
       {
         "height": 4,
@@ -1012,7 +1159,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         },
         "width": 6,
         "xPos": 6,
-        "yPos": 49
+        "yPos": 53
       }     
     ]
   }
