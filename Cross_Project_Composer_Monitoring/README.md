@@ -12,10 +12,16 @@ The model uses a Google Cloud project acting as a Monitoring Project, used to mo
 The process works fully with Cloud Composer 2; Cloud Composer 1 environments will miss few of the metrics and corresponding alerts (indicated below) due to architecture differences. 
 
 The dashboard monitors and creates alerts for multiple metrics, including environment health:
+
 ![health](images/health.png)
 
 or CPU metrics:
+
 ![cpu](images/cpu.png)
+
+To see which environment a particular line represents, simply hover over it (it will display a project name and resource):
+![cpu](images/hover.png)
+
 
 A complete list monitored metrics:
 - Composer envrionment health (based on Monitoring DAG)
