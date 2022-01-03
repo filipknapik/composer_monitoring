@@ -6,10 +6,7 @@
 #       3. Save the list of projects with Cloud Composer environments to be monitored in "monitored_projects", set in the locals block
 #       4. Run "terraform apply"
 #
-#   The script creates:
-#       In monitored projects:
-#           1. Custom metrics for Composer monitoring (log-based)
-#       In the monitoring project:
+#   The script creates the following resources in the monitoring project:
 #           1. Adds monitored projects to Cloud Monitoring
 #           2. Creates Alert Policies
 #           3. Creates Monitoring Dashboard
@@ -51,78 +48,6 @@ resource "google_monitoring_monitored_project" "projects_monitored" {
   provider      = google-beta
 }
 
-
-#######################################################
-#  
-# Create custom metrics in Monitored Projects
-#
-########################################################
-
-resource "google_logging_metric" "tasks_for_retry" {
-  for_each = local.monitored_projects
-  project = "${each.value}"
-  name   = "Composer_Airflow_new_tasks_for_RETRY"
-  filter = "resource.type=\"cloud_composer_environment\" log_name:\"airflow-scheduler\" \"Marking task as UP_FOR_RETRY\""
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    labels {
-      key         = "environment_name"
-      value_type  = "STRING"
-      description = "Composer environment"
-    }
-    labels {
-      key         = "project_id"
-      value_type  = "STRING"
-      description = "Composer project"
-    }
-    display_name = "Composer Airflow tasks for RETRY"
-  }
-
-  label_extractors = {
-    "environment_name" = "EXTRACT(resource.labels.environment_name)"
-    "project_id"  = "EXTRACT(resource.labels.project_id)"
-  }
-}
-
-resource "google_logging_metric" "tasks_failed" {
-  for_each = local.monitored_projects
-  project = "${each.value}"
-  name   = "Composer_Airflow_new_FAILED_tasks"
-  filter = "resource.type=\"cloud_composer_environment\" log_name:\"airflow-scheduler\" \"Marking task as FAILED\""
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    labels {
-      key         = "environment_name"
-      value_type  = "STRING"
-      description = "Composer environment"
-    }
-    labels {
-      key         = "project_id"
-      value_type  = "STRING"
-      description = "Composer project"
-    }
-    display_name = "Composer Airflow FAILED tasks"
-  }
-
-  label_extractors = {
-    "environment_name" = "EXTRACT(resource.labels.environment_name)"
-    "project_id"  = "EXTRACT(resource.labels.project_id)"
-  }
-}
-
-resource "time_sleep" "tasks_for_retry" {
-  depends_on = [google_logging_metric.tasks_for_retry]
-
-  create_duration = "60s"
-}
-
-resource "time_sleep" "tasks_failed" {
-  depends_on = [google_logging_metric.tasks_failed]
-
-  create_duration = "60s"
-}
 
 #######################################################
 #  
@@ -505,7 +430,7 @@ resource "google_monitoring_alert_policy" "scheduled_tasks_percentage" {
             "| window(10m)",
             "| filter_ratio_by [resource.project_id, resource.environment_name], metric.state = 'scheduled'",
             "| condition val() > 0.80"])
-        duration = "120s"
+        duration = "300s"
         trigger {
             count = "1"
         }
@@ -531,7 +456,7 @@ resource "google_monitoring_alert_policy" "queued_tasks_percentage" {
             "| filter_ratio_by [resource.project_id, resource.environment_name], metric.state = 'queued'",
             "| group_by [resource.project_id, resource.environment_name]",
             "| condition val() > 0.95"])
-        duration = "120s"
+        duration = "300s"
         trigger {
             count = "1"
         }
@@ -721,64 +646,6 @@ resource "google_monitoring_alert_policy" "other_errors" {
             "    [value_log_entry_count_max_aggregate: aggregate(value_log_entry_count_max)]",
             "| condition val() > 10"])
         duration = "300s"
-        trigger {
-            count = "1"
-        }
-    }
-  }
-  #alert_strategy {
-  #    auto_close = "30m"
-  #}
-}
-
-resource "google_monitoring_alert_policy" "new_tasks_for_retry" {
-  display_name = "New tasks for retry"
-
-  depends_on = [time_sleep.tasks_for_retry]
-
-  combiner     = "OR"
-  conditions {
-    display_name = "New tasks for retry"
-    condition_monitoring_query_language {
-        query = join("", [
-            "fetch cloud_composer_environment",
-            "| metric 'logging.googleapis.com/user/Composer_Airflow_new_tasks_for_RETRY'",
-            "| align delta(5m)",
-            "| every 5m",
-            "| group_by [metric.environment_name, metric.project_id],",
-            "   [value_Composer_Airflow_new_tasks_for_RETRY_aggregate: aggregate(value.Composer_Airflow_new_tasks_for_RETRY)]",
-            "| condition val() > 10"
-            ])
-        duration = "60s"
-        trigger {
-            count = "1"
-        }
-    }
-  }
-  #alert_strategy {
-  #    auto_close = "30m"
-  #}
-}
-
-resource "google_monitoring_alert_policy" "new_tasks_failed" {
-  display_name = "New tasks failed"
-
-  depends_on = [time_sleep.tasks_failed]
-
-  combiner     = "OR"
-  conditions {
-    display_name = "New tasks failed"
-    condition_monitoring_query_language {
-        query = join("", [
-            "fetch cloud_composer_environment",
-            "| metric 'logging.googleapis.com/user/Composer_Airflow_new_FAILED_tasks'",
-            "| align delta(5m)",
-            "| every 5m",
-            "| group_by [metric.environment_name, metric.project_id],",
-            "   [value_Composer_Airflow_new_FAILED_tasks: aggregate(value.Composer_Airflow_new_FAILED_tasks)]",
-            "| condition val() > 10"
-            ])
-        duration = "60s"
         trigger {
             count = "1"
         }
@@ -1138,29 +1005,7 @@ resource "google_monitoring_dashboard" "Composer_Dashboard" {
         "width": 12,
         "xPos": 0,
         "yPos": 52
-      },
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.new_tasks_for_retry.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 0,
-        "yPos": 53
-      },   
-      {
-        "height": 4,
-        "widget": {
-          "alertChart": {
-            "name": "${google_monitoring_alert_policy.new_tasks_failed.name}"
-          }
-        },
-        "width": 6,
-        "xPos": 6,
-        "yPos": 53
-      }     
+      }  
     ]
   }
 }
