@@ -20,7 +20,12 @@ or CPU metrics:
 ![cpu](images/cpu.png)
 
 To see which environment a particular line represents, simply hover over it (it will display a project name and resource):
+
 ![cpu](images/hover.png)
+
+In case a metric exceeds a predefined threshold, an incident will be raised and respective alerts will be shown in a chart corresponding to this metric:
+
+![cpu](images/incidents.png)
 
 
 A complete list monitored metrics:
