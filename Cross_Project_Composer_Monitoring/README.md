@@ -1,3 +1,6 @@
+# UPDATE October 2022
+Code and instructions found here are now part of [this guide on cloud.google.com](https://cloud.google.com/composer/docs/terraform-cross-project-monitoring). This repository is not actively monitored. 
+
 ## Cloud Composer cross-project environment monitoring
 
 ### **The need**
